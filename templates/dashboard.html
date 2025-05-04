@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Queue Management Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div class="dashboard">
+        <header>
+            <h1>{{ session['window_name'] }}</h1>
+            <div class="user-info">
+                <span>{{ session['agent_name'] }}</span>
+                <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+            </div>
+        </header>
+
+        <div class="stats-container">
+            <div class="stat-card">
+                <h3>Waiting Clients</h3>
+                <div class="value" id="waitingCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Average Wait Time</h3>
+                <div class="value" id="avgWaitTime">0 min</div>
+            </div>
+            <div class="stat-card">
+                <h3>Today's Clients</h3>
+                <div class="value" id="todayClients">0</div>
+            </div>
+        </div>
+
+        <div class="queue-container">
+            <h2>Client Queue</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Position</th>
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th>Service</th>
+                        <th>Wait Time</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="queueTable">
+                    <!-- Queue data will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 

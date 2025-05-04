@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Queue Management - Agent Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .queue-card {
+            transition: all 0.3s ease;
+        }
+        .queue-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .service-timer {
+            font-size: 2rem;
+            font-weight: bold;
+        }
+        .status-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+        }
+        .window-status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 5px;
+            text-align: center;
+        }
+        .window-active {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+        }
+        .window-inactive {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+        }
+        .arrived-clients {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-bank me-2"></i>
+                Bank Queue Management
+            </a>
+            <div class="d-flex align-items-center">
+                <span class="text-white me-3">
+                    <i class="fas fa-user-circle me-1"></i>
+                    Agent: <span id="agent-name">John Doe</span>
+                </span>
+                <span class="text-white">
+                    <i class="fas fa-door-open me-1"></i>
+                    Window: <span id="window-number">Guichet Crédit</span>
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid mt-4">
+        <div class="row">
+            <!-- Current Client Section -->
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">
+                            <i class="fas fa-user me-2"></i>
+                            Current Client
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="text-center mb-4">
+                            <div class="service-timer" id="service-timer">00:00</div>
+                            <small class="text-muted">Service Duration</small>
+                        </div>
+                        <div class="client-info">
+                            <p><strong>Client ID:</strong> <span id="current-client-id">-</span></p>
+                            <p><strong>Service Type:</strong> <span id="current-service-type">-</span></p>
+                            <p><strong>Wait Time:</strong> <span id="current-wait-time">-</span></p>
+                        </div>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-primary mb-2" onclick="startServiceForCurrentClient()" id="start-service-btn">
+                                <i class="fas fa-play me-2"></i>
+                                Start Service
+                            </button>
+                            <button class="btn btn-success" onclick="completeService()">
+                                <i class="fas fa-check me-2"></i>
+                                Complete Service
+                            </button>
+                            <button class="btn btn-warning" onclick="pauseService()">
+                                <i class="fas fa-pause me-2"></i>
+                                Pause Service
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Arrived Clients Section -->
+                
+            </div>
+
+            <!-- Queue Management Section -->
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="fas fa-list me-2"></i>
+                            Queue Management
+                        </h5>
+                        <div>
+                            <button class="btn btn-light btn-sm" onclick="refreshQueue()">
+                                <i class="fas fa-sync-alt me-1"></i>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4" id="queue-stats">
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 id="total-waiting">0</h3>
+                                        <small>Total Waiting</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 id="avg-wait-time">0m</h3>
+                                        <small>Avg. Wait Time</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 id="served-today">0</h3>
+                                        <small>Served Today</small>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-center">
+                                    <div class="card-body">
+                                        <h3 id="avg-service-time">0m</h3>
+                                        <small>Avg. Service Time</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="queue-list" id="queue-list">
+                            <!-- Queue items will be dynamically added here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Timer functionality
+        let timerInterval;
+        let seconds = 0;
+        let isTimerRunning = false;
+
+        function startTimer() {
+            if (!isTimerRunning) {
+                isTimerRunning = true;
+                timerInterval = setInterval(() => {
+                    seconds++;
+                    updateTimerDisplay();
+                }, 1000);
+            }
+        }
+
+        function updateTimerDisplay() {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            document.getElementById('service-timer').textContent = 
+                `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            seconds = 0;
+            updateTimerDisplay();
+        }
+
+        function pauseService() {
+            clearInterval(timerInterval);
+            isTimerRunning = false;
+            // Add API call to pause service
+            alert('Service paused');
+        }
+
+        function completeService() {
+            const currentClientId = document.getElementById('current-client-id').textContent;
+            if (currentClientId === '-') {
+                alert('No active service to complete');
+                return;
+            }
+
+            fetch('/api/service/complete', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ clientId: currentClientId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    resetTimer();
+                    // Clear current client info
+                    document.getElementById('current-client-id').textContent = '-';
+                    document.getElementById('current-service-type').textContent = '-';
+                    document.getElementById('current-wait-time').textContent = '-';
+                    refreshQueue();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function refreshQueue() {
+            // Add API call to refresh queue data
+            fetch('/api/queue')
+                .then(response => response.json())
+                .then(data => updateQueueDisplay(data))
+                .catch(error => console.error('Error:', error));
+        }
+
+        function updateQueueDisplay(data) {
+            // Update queue statistics
+            document.getElementById('total-waiting').textContent = data.totalWaiting || 0;
+            document.getElementById('avg-wait-time').textContent = data.avgWaitTime || '0m';
+            document.getElementById('served-today').textContent = data.servedToday || 0;
+            document.getElementById('avg-service-time').textContent = data.avgServiceTime || '0m';
+
+            // Update queue list
+            const queueList = document.getElementById('queue-list');
+            queueList.innerHTML = ''; // Clear existing items
+
+            // Add new queue items
+            data.queue.forEach(client => {
+                const queueItem = createQueueItem(client);
+                queueList.appendChild(queueItem);
+            });
+
+            // Update Start Service button visibility
+            const startServiceBtn = document.getElementById('start-service-btn');
+            const currentClientId = document.getElementById('current-client-id').textContent;
+            startServiceBtn.style.display = currentClientId === '-' ? 'block' : 'none';
+        }
+
+        function createQueueItem(client) {
+            const div = document.createElement('div');
+            div.className = 'queue-card card mb-3';
+            div.innerHTML = `
+                <div class="card-body">
+                    <span class="status-badge badge ${client.status === 'waiting' ? 'bg-warning' : 'bg-success'}">
+                        ${client.status}
+                    </span>
+                    <h5 class="card-title">Client ${client.id}</h5>
+                    <p class="card-text">
+                        <strong>Service:</strong> ${client.service}<br>
+                        <strong>Wait Time:</strong> ${client.waitTime}<br>
+                        <strong>Position:</strong> #${client.position}
+                    </p>
+                    <button class="btn btn-primary btn-sm" onclick="callClient('${client.id}')">
+                        <i class="fas fa-phone-alt me-1"></i>
+                        Call Client
+                    </button>
+                </div>
+            `;
+            return div;
+        }
+
+        function updateArrivedClients(clients) {
+            const arrivedList = document.getElementById('arrived-clients');
+            arrivedList.innerHTML = '';
+
+            clients.forEach(client => {
+                const div = document.createElement('div');
+                div.className = 'card mb-2';
+                div.innerHTML = `
+                    <div class="card-body">
+                        <h6 class="card-title">Client ${client.id}</h6>
+                        <p class="card-text mb-2">
+                            <strong>Service:</strong> ${client.service}<br>
+                            <strong>Position:</strong> #${client.position}
+                        </p>
+                        <button class="btn btn-success btn-sm w-100" onclick="startService('${client.id}')">
+                            <i class="fas fa-play me-1"></i>
+                            Start Service
+                        </button>
+                    </div>
+                `;
+                arrivedList.appendChild(div);
+            });
+        }
+
+        function startService(clientId) {
+            fetch('/api/service/start', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ clientId: clientId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update current client info
+                    document.getElementById('current-client-id').textContent = data.clientData.id;
+                    document.getElementById('current-service-type').textContent = data.clientData.service;
+                    document.getElementById('current-wait-time').textContent = data.clientData.waitTime;
+                    
+                    // Start the timer
+                    resetTimer(); // Reset any existing timer
+                    startTimer();
+                    
+                    // Refresh the queue display
+                    refreshQueue();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function callClient(clientId) {
+            fetch('/api/client/call', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ clientId: clientId })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Set the current client info when called
+                    document.getElementById('current-client-id').textContent = clientId;
+                    document.getElementById('current-service-type').textContent = data.serviceType || '-';
+                    document.getElementById('current-wait-time').textContent = data.waitTime || '-';
+                    
+                    // Show the Start Service button
+                    document.getElementById('start-service-btn').style.display = 'block';
+                    
+                    refreshQueue();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+
+        function startServiceForCurrentClient() {
+            const currentClientId = document.getElementById('current-client-id').textContent;
+            if (currentClientId === '-') {
+                alert('Please call a client first before starting service');
+                return;
+            }
+            startService(currentClientId);
+        }
+
+        // Initial load
+        refreshQueue();
+        // Refresh every 30 seconds
+        setInterval(refreshQueue, 30000);
+    </script>
+</body>
+</html> 
