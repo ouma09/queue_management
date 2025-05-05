@@ -238,6 +238,9 @@ def cancel_service(client_id):
     finally:
         db.close()
 
+
+# ... [previous content unchanged up to update_positions() function]
+
 def update_positions(db, window_name):
     clients = db.query(Client).filter(
         Client.status == 'waiting',
@@ -250,8 +253,130 @@ def update_positions(db, window_name):
 
     db.commit()
 
-# Chatbot endpoints copied below (e.g., /webhook, /get_session, etc.)
-# ... (Insert the chatbot routes from chatbot.py here)
+# === Chatbot Routes and Logic ===
+@app.route('/webhook', methods=['GET', 'POST'])
+def webhook():
+    if request.method == 'GET':
+        return request.args.get('hub.challenge', '')
+
+    message = request.form.get('Body', '').strip()
+    from_number = request.form.get('From', '')
+
+    if not from_number:
+        return jsonify({'message': "Error processing request", 'status': 'error'})
+
+    if not message or message.lower() == 'start':
+        create_user_session(from_number)
+        update_user_session(from_number, {'step': 'get_name'})
+        return jsonify({
+            'message': "Hello! I'm the bot from Queue Management. What is your name?",
+            'status': 'success'
+        })
+
+    session_data = get_user_session(from_number)
+    if not session_data:
+        create_user_session(from_number)
+        update_user_session(from_number, {'step': 'get_name'})
+        return jsonify({
+            'message': "Hello! I'm the bot from Queue Management. What is your name?",
+            'status': 'success'
+        })
+
+    if session_data['step'] == 'get_name':
+        update_user_session(from_number, {'name': message})
+        options = "\n".join([f"{i+1}. {s}" for i, s in enumerate(SERVICE_DESCRIPTIONS.keys())])
+        update_user_session(from_number, {'step': 'get_service'})
+        return jsonify({
+            'message': f"Nice to meet you {message}! Please select your service type by number:\n{options}",
+            'status': 'success'
+        })
+
+    elif session_data['step'] == 'get_service':
+        try:
+            service_index = int(message) - 1
+            service_type = list(SERVICE_DESCRIPTIONS.keys())[service_index]
+            update_user_session(from_number, {'service_type': service_type, 'step': 'check_documents'})
+            documents = DOCUMENT_REQUIREMENTS[service_type]
+            doc_list = "\n".join(f"- {doc}" for doc in documents)
+            return jsonify({
+                'message': f"You selected {service_type}.\nRequired documents:\n{doc_list}\nDo you have all these documents? (yes/no)",
+                'status': 'success'
+            })
+        except:
+            return jsonify({'message': 'Please enter a valid number from the list.', 'status': 'success'})
+
+    elif session_data['step'] == 'check_documents':
+        if message.lower() in ['yes', 'y']:
+            db = SessionLocal()
+            try:
+                service_type = session_data['service_type']
+                window_name = SERVICE_WINDOW_MAP.get(service_type)
+                position = db.query(Client).filter(Client.status == 'waiting', Client.assigned_window == window_name).count() + 1
+                wait_time = BASE_WAIT_TIMES[service_type] * position
+                new_client = Client(
+                    name=session_data.get('name', 'Chat Client'),
+                    phone_number=from_number,
+                    service_type=service_type,
+                    status='waiting',
+                    position=position,
+                    wait_time=wait_time,
+                    check_in_time=datetime.now(),
+                    assigned_window=window_name
+                )
+                db.add(new_client)
+                db.commit()
+                db.refresh(new_client)
+
+                socketio.emit('queue_update', {
+                    'action': 'new_client',
+                    'client_id': new_client.id,
+                    'service_type': service_type,
+                    'window_name': window_name,
+                    'position': position,
+                    'wait_time': wait_time,
+                    'phone_number': from_number
+                })
+
+                clear_user_session(from_number)
+                return jsonify({
+                    'message': f"You've been added to the queue.\nYour position: {position}\nEstimated wait time: {wait_time} minutes.\nPlease proceed to: {window_name}",
+                    'status': 'success'
+                })
+            except Exception as e:
+                db.rollback()
+                return jsonify({'message': "An error occurred.", 'status': 'error'})
+            finally:
+                db.close()
+        elif message.lower() in ['no', 'n']:
+            clear_user_session(from_number)
+            return jsonify({
+                'message': "Please gather all required documents and type 'start' when ready.",
+                'status': 'success'
+            })
+        else:
+            return jsonify({'message': "Please answer with 'yes' or 'no'.", 'status': 'success'})
+
+    return jsonify({'message': "Type 'start' to begin.", 'status': 'success'})
+
+@app.route('/get_session')
+def get_session():
+    phone_number = request.args.get('phone_number', '')
+    return jsonify(get_user_session(phone_number) or {})
+
+@app.route('/get_queue_info/<int:client_id>')
+def get_queue_info(client_id):
+    db = SessionLocal()
+    try:
+        client = db.query(Client).filter(Client.id == client_id).first()
+        if client:
+            return jsonify({'position': client.position, 'wait_time': client.wait_time})
+        return jsonify({})
+    finally:
+        db.close()
+
+@app.route('/test')
+def test_interface():
+    return render_template('chat_test.html')
 
 @socketio.on('connect')
 def handle_connect():
