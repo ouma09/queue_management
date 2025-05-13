@@ -1,5 +1,8 @@
 # app.py (merged Flask + chatbot app)
 
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from database import SessionLocal, engine, Base
 from models import Agent, Client, ServiceType, QueueStats
@@ -16,14 +19,10 @@ load_dotenv()
 
 # Create Flask app
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
+#app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 
 # Initialize SocketIO with eventlet
-socketio = SocketIO(app, 
-                   cors_allowed_origins="*",
-                   async_mode='eventlet',
-                   logger=True,
-                   engineio_logger=True)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='eventlet')
 
 # Create all tables
 Base.metadata.create_all(bind=engine)

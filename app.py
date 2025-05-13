@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 from database import SessionLocal, engine, Base
 from models import Agent, Client
@@ -11,10 +14,10 @@ import os
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 
-# Initialize SocketIO with gevent
+# Initialize SocketIO with eventlet
 socketio = SocketIO(app, 
                    cors_allowed_origins="*",
-                   async_mode='gevent')
+                   async_mode='eventlet')
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
