@@ -18,14 +18,12 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'your-secret-key')
 
-# Initialize SocketIO with gevent
-socketio = SocketIO(app,
-                    cors_allowed_origins="*",
-                    async_mode='gevent',
-                    ping_timeout=60,
-                    ping_interval=25,
-                    logger=True,
-                    engineio_logger=True)
+# Initialize SocketIO with eventlet
+socketio = SocketIO(app, 
+                   cors_allowed_origins="*",
+                   async_mode='eventlet',
+                   logger=True,
+                   engineio_logger=True)
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
@@ -388,4 +386,4 @@ def handle_disconnect():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    socketio.run(app, host='0.0.0.0', port=port, debug=False)
+    socketio.run(app, host='127.0.0.1', port=port, debug=True, use_reloader=True)
